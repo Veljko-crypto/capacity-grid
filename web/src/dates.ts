@@ -22,8 +22,12 @@ export function validRange(from: string, to: string) {
   );
 }
 export function capacity(weeklyHours: number, workdays: number) {
-  return (weeklyHours * workdays) / 5;
+  return weeklyHours * (workdays / 5);
 }
 export function overHours(allocated: number, available: number) {
-  return Math.max(0, allocated - available);
+  const difference = allocated - available;
+  // Ignore arithmetic noise, not meaningful fractions of an hour.
+  const tolerance =
+    Number.EPSILON * Math.max(1, Math.abs(allocated), Math.abs(available)) * 4;
+  return difference > tolerance ? difference : 0;
 }

@@ -1,5 +1,6 @@
 ﻿import { useEffect, useRef, useState } from "react";
 import { capacity, overHours } from "./dates";
+import { request, RequestError } from "./request";
 
 type Person = {
   id: number;
@@ -19,7 +20,7 @@ type Props = {
   onSavingChange?: (saving: boolean) => void;
 };
 const number = new Intl.NumberFormat("en", { maximumFractionDigits: 2 });
-const format = (n: number) => number.format(n);
+const format = (n: number) => (n > 0 && n < 0.005 ? "<0.01" : number.format(n));
 const date = (s: string) =>
   new Date(`${s}T00:00:00Z`).toLocaleDateString("en", {
     month: "short",
@@ -27,17 +28,6 @@ const date = (s: string) =>
     year: "numeric",
     timeZone: "UTC",
   });
-
-async function request<T>(url: string, options?: RequestInit): Promise<T> {
-  const response = await fetch(url, options);
-  if (!response.ok) {
-    const body = await response.json().catch(() => null);
-    throw new Error(
-      body?.error || `Request failed (${response.status}). Please retry.`,
-    );
-  }
-  return response.json();
-}
 
 export function CapacityGrid({ from, to, onSavingChange }: Props) {
   const [data, setData] = useState<Data | null>(null);
@@ -52,16 +42,19 @@ export function CapacityGrid({ from, to, onSavingChange }: Props) {
   const [saveError, setSaveError] = useState("");
   const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState("");
-  const editButton = useRef<HTMLButtonElement | null>(null);
   const focusAfterRefresh = useRef<number | null>(null);
+  const summary = useRef<HTMLDivElement | null>(null);
   const editor = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    setPage(0);
+  }, [from, to]);
 
   useEffect(() => {
     const controller = new AbortController();
     let current = true;
     setLoading(true);
     setError("");
-    setPage(0);
     request<Data>(`/api/capacity?from=${from}&to=${to}`, {
       signal: controller.signal,
     })
@@ -81,18 +74,25 @@ export function CapacityGrid({ from, to, onSavingChange }: Props) {
   }, [from, to, revision]);
 
   useEffect(() => {
-    if (!loading && !error && data && focusAfterRefresh.current !== null) {
-      document
-        .getElementById(`edit-person-${focusAfterRefresh.current}`)
-        ?.focus();
+    if (
+      !editing &&
+      !loading &&
+      !error &&
+      data &&
+      focusAfterRefresh.current !== null
+    ) {
+      const target = document.getElementById(
+        `edit-person-${focusAfterRefresh.current}`,
+      );
+      (target ?? summary.current)?.focus();
       focusAfterRefresh.current = null;
     }
-  }, [loading, error, data]);
+  }, [loading, error, data, editing]);
 
   function closeEditor() {
+    focusAfterRefresh.current = editing?.id ?? null;
     setEditing(null);
     setSaveError("");
-    editButton.current?.focus();
   }
   async function save() {
     if (!editing || saving) return;
@@ -126,7 +126,9 @@ export function CapacityGrid({ from, to, onSavingChange }: Props) {
       closeEditor();
     } catch (err) {
       setSaveError(
-        err instanceof Error ? err.message : "Could not save. Please retry.",
+        err instanceof RequestError && !err.uncertain
+          ? err.message
+          : `${err instanceof Error ? err.message + " " : ""}Could not confirm the save. It may have completed. Retry to set these hours again.`,
       );
     } finally {
       setSaving(false);
@@ -254,7 +256,7 @@ export function CapacityGrid({ from, to, onSavingChange }: Props) {
       )}
       {ready && (
         <>
-          <div className="grid-summary">
+          <div className="grid-summary" ref={summary} tabIndex={-1}>
             <strong>
               {people.length} {people.length === 1 ? "person" : "people"}
             </strong>
@@ -307,8 +309,7 @@ export function CapacityGrid({ from, to, onSavingChange }: Props) {
                               className="edit-button"
                               disabled={saving || editing !== null}
                               aria-label={`Edit weekly hours for ${p.name}`}
-                              onClick={(e) => {
-                                editButton.current = e.currentTarget;
+                              onClick={() => {
                                 setEditing(p);
                                 setHours(String(p.weeklyHours));
                                 setSaveError("");
@@ -347,7 +348,7 @@ export function CapacityGrid({ from, to, onSavingChange }: Props) {
                                 <small>
                                   {over > 0
                                     ? `${format(over)} h over`
-                                    : `${format(Math.max(0, available - allocated))} h available`}
+                                    : `${format(overHours(available, allocated))} h available`}
                                 </small>
                               </td>
                             );
