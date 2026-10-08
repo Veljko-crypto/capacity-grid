@@ -156,7 +156,7 @@ export function CapacityGrid({ from, to, onSavingChange }: Props) {
     <>
       <div className="grid-tools">
         <label className="search">
-          Find a person
+          <span className="search-label">Find a person</span>
           <input
             type="search"
             placeholder="Search by name"
@@ -321,7 +321,17 @@ export function CapacityGrid({ from, to, onSavingChange }: Props) {
                               }}
                             >
                               {format(p.weeklyHours)} h / week{" "}
-                              <span aria-hidden="true">✎</span>
+                              <svg
+                                aria-hidden="true"
+                                viewBox="0 0 16 16"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="1.25"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                              >
+                                <path d="m10.5 2.5 3 3M2.5 13.5l3.2-.7 7.8-7.8a1.4 1.4 0 0 0-2-2l-7.8 7.8-.7 3.2Z" />
+                              </svg>
                             </button>
                           </th>
                           {p.allocated.map((allocated, i) => {
